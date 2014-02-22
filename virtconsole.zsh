@@ -21,12 +21,20 @@ function manage_virtual_machine {
     name=${3}
 
     while [ true ]; do
-        dialog --backtitle 'VirtBSD' --title "Manage ${name}" --menu "" 0 0 0 \
-            1 'Show Status' \
-            2> ${dialogchoice}
+        vmstatus=$(echo ${json} | jsonpath "VirtualMachines[${vmid}].Status")
+        if [ "${vmstatus}" = "Online" ]; then
+            vmstatus="Stop VM"
+        else
+            vmstatus="Start VM"
+        fi
 
-        if [ ${?} = 1 ]; then
-            return
+        dialogargs=("--backtitle" "VirtBSD" "--title" "Manage ${name}" "--menu" " " "0" "0" "0")
+        dialogargs+=("1" "Show Status")
+        dialogargs+=("2" "${vmstatus}")
+        dialog ${dialogargs} 2> ${dialogchoice}
+
+        if [ ${?} -eq 1 ]; then
+            break
         fi
 
         choice=$(cat ${dialogchoice})
@@ -39,6 +47,17 @@ function manage_virtual_machine {
                 echo ${json} | jsonpath "VirtualMachines[${vmid}].Path" >> ${outfile}
 
                 dialog --backtitle VirtBSD --title ${name} --textbox ${outfile} 8 40
+                ;;
+            2)
+                uuid=$(echo ${json} | jsonpath "VirtualMachines[${vmid}].UUID")
+                action="start"
+                vmstatus=$(echo ${json} | jsonpath "VirtualMachines[${vmid}].Status")
+                if [ "${vmstatus}" = "Online" ]; then
+                    action="stop"
+                fi
+
+                curl -s http://${host}/vmapi/1/vm/uuid/${uuid}/${action}
+                json=$(curl -s http://${host}/vmapi/1/vm/list)
                 ;;
         esac
     done
